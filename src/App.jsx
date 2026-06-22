@@ -16,18 +16,33 @@ const ADMIN_PASSWORD = "bekfa2024";
 const SQUADS = ["Elite Team", "U13", "U11"];
 const NAV_TARGETS = ["Home", "About", "POTM", "Squads", "Coaches", "News", "Fixtures", "Standings", "Testimonials", "Register", "Contact"];
 
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
+
 /* ---------- storage helpers ---------- */
 async function loadList(key, fallback) {
   try {
-    const r = await window.storage.get(key, true);
-    return r ? JSON.parse(r.value) : fallback;
+    const { data, error } = await supabase
+      .from("site_data")
+      .select("value")
+      .eq("key", key)
+      .single();
+    if (error || !data) return fallback;
+    return data.value;
   } catch {
     return fallback;
   }
 }
+
 async function saveList(key, value) {
   try {
-    await window.storage.set(key, JSON.stringify(value), true);
+    await supabase
+      .from("site_data")
+      .upsert({ key, value, updated_at: new Date().toISOString() });
   } catch (e) {
     console.error("storage save failed", e);
   }
@@ -3298,8 +3313,9 @@ export default function App() {
       setGraduatesState(await loadList("bekfa:graduates", seedGraduates));
       setPageVisibilityState(await loadList("bekfa:graduatesVisibility", seedPageVisibility));
       try {
-        const r = await window.storage.get("bekfa:splashBall", true);
-        if (r) setSplashBallState(r.value);
+      // Replace the try/catch block for splashBall with:
+      const splashData = await loadList("bekfa:splashBall", "");
+      if (splashData) setSplashBallState(splashData);
       } catch {
         // no custom ball set yet
       }
@@ -3321,14 +3337,14 @@ export default function App() {
   const setCarouselSettings = (v) => { setCarouselSettingsState(v); saveList("bekfa:carouselSettings", v); };
   const setGraduates = (v) => { setGraduatesState(v); saveList("bekfa:graduates", v); };
   const setPageVisibility = (v) => { setPageVisibilityState(v); saveList("bekfa:graduatesVisibility", v); };
-  const setSplashBall = (v) => {
-    setSplashBallState(v);
-    if (v) {
-      window.storage.set("bekfa:splashBall", v, true).catch((e) => console.error(e));
-    } else {
-      window.storage.delete("bekfa:splashBall", true).catch(() => {});
-    }
-  };
+ const setSplashBall = (v) => {
+  setSplashBallState(v);
+  if (v) {
+    saveList("bekfa:splashBall", v);
+  } else {
+    supabase.from("site_data").delete().eq("key", "bekfa:splashBall");
+  }
+};
 
   const handleNav = useCallback((id) => {
     const el = document.getElementById(id);
